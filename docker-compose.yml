@@ -1,0 +1,66 @@
+services:
+  nginx:
+    image: nginx:stable-alpine
+    container_name: proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - cms
+      - dba
+    networks:
+      - appnet
+    restart: unless-stopped
+
+  cms:
+    image: prestashop/prestashop:8.1-apache
+    container_name: cms
+    env_file: .env          # DB_SERVER, DB_NAME, DB_USER, DB_PASSWD, PS_*, ADMIN_*
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ps_data:/var/www/html
+    networks:
+      - appnet
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.11
+    container_name: db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - appnet
+    restart: unless-stopped
+
+  dba:
+    image: phpmyadmin:latest
+    container_name: dba
+    environment:
+      PMA_HOST: db
+      PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI}
+    depends_on:
+      - db
+    networks:
+      - appnet
+    restart: unless-stopped
+
+networks:
+  appnet:
+    driver: bridge
+
+volumes:
+  ps_data:
+  db_data:
